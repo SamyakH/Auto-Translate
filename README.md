@@ -39,7 +39,7 @@ A powerful Chrome/Chromium extension that automatically translates foreign langu
 1. Clone or download this repository:
 \`\`\`bash
 git clone https://github.com/SamyakH/Auto-Translate.git
-cd auto-translate-extension
+cd Auto-Translate
 \`\`\`
 
 2. Open Chrome/Edge browser and navigate to:
