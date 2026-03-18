@@ -1,29 +1,36 @@
-# Auto Translate - Complete Browser Extension
+# Force Inline Auto Translate
 
-A powerful Chrome extension that automatically translates foreign language web pages using Google Translate, removes translation blockers, enables right-click/text selection on restricted sites, and remembers processed domains for faster subsequent translations.
+A powerful Chrome/Chromium extension that automatically translates foreign language web pages using Chrome's built-in Google Translate, removes translation blockers, enables right-click/text selection on restricted sites, and remembers processed domains for faster subsequent translations. It also includes a simple ON/OFF toggle on the toolbar.
 
 ## Features
 
 ### 🌐 Automatic Translation
-- **Smart Language Detection**: Detects page language through HTML attributes, meta tags, and Unicode script analysis
+- **Smart Language Detection**: Detects page language through HTML `lang` attributes, meta tags, and Unicode script analysis
 - **Multi-language Support**: Chinese, Russian, Japanese, Korean, Arabic, Hebrew, Thai, and more
-- **Translation Blocker Removal**: Automatically removes CSP restrictions, notranslate classes, and blocking attributes
-- **Native Chrome Integration**: Leverages Chrome's built-in Google Translate for seamless translation
+- **Translation Blocker Removal**: Automatically removes CSP meta tags (where possible), `notranslate` classes, and blocking attributes
+- **Native Chrome Integration**: Leverages Chrome's built-in Google Translate for seamless inline translation
+- **Fast Triggering**: On foreign pages, translation is triggered within ~600 ms (or ~400 ms on remembered domains)
 
 ### 🖱️ Right-Click & Selection Enablement
 - **Context Menu Restoration**: Removes right-click blockers on websites that disable context menus
 - **Text Selection Freedom**: Enables text selection on sites with copy-protection or selection blocking
-- **CSS Override System**: Forces enable user interactions through comprehensive style overrides
+- **CSS Override System**: Forces user interactions (selection and context menu) through comprehensive style overrides
 
 ### 💾 Domain Memory System
 - **Smart Domain Tracking**: Remembers websites that have been translated
-- **Faster Re-processing**: Automatically retranslates remembered domains with optimized timing
-- **Persistent Storage**: Domain memory persists across browser sessions
+- **Faster Re-processing**: Automatically re-triggers translation more quickly on remembered domains
+- **Persistent Storage**: Domain memory persists across browser sessions using `chrome.storage.local`
+
+### 🧊 ON/OFF Toggle
+- **Global Toggle**: Click the toolbar icon to turn the extension ON or OFF
+- **Badge Indicator**: Shows `ON` (green) when active, `OFF` (gray) when disabled
+- **Persistent State**: The ON/OFF state is remembered between browser sessions
 
 ### ⚡ Performance Optimization
-- **Multiple Initialization Strategies**: Adapts to different page loading scenarios
+- **Multiple Initialization Strategies**: Adapts to different page loading scenarios and dynamic content
 - **Backup Triggers**: Ensures activation even on dynamic or slow-loading pages
-- **Silent Operation**: Runs completely in the background without UI interruptions
+- **Targeted Event Storm**: Reduced but focused event dispatching to trigger Chrome Translate quickly without excessive overhead
+- **Silent Operation**: Runs completely in the background without adding visible UI elements
 
 ## Installation
 
@@ -53,19 +60,27 @@ Place an `icon.png` file (128x128 pixels recommended) in the extension directory
 
 ### Automatic Operation
 
-The extension works automatically once installed:
+Once installed and enabled:
 
-1. Visit any foreign language website
-2. The extension detects the language automatically
-3. Translation triggers within 1 second (or 800ms for remembered domains)
+1. Visit any **foreign language** website
+2. The extension detects the page language automatically
+3. Translation is triggered as fast as possible:
+   - ~600 ms after blockers are removed on new domains
+   - ~400 ms on remembered domains
 4. Right-click and text selection are enabled automatically
+
+### ON/OFF Control
+
+- Click the extension icon in the toolbar to toggle:
+  - **ON**: Badge shows `ON` (green). Extension will auto-translate foreign pages and enable right-click.
+  - **OFF**: Badge shows `OFF` (gray). Extension will do nothing on that profile.
+- The state is saved and restored after browser restarts.
 
 ### No Configuration Required
 
-- No settings to adjust
-- No buttons to click
-- Works silently in the background
-- Completely automatic operation
+- No settings page required
+- Works silently in the background when ON
+- Completely automatic operation on foreign pages
 
 ### Supported Websites
 
@@ -76,13 +91,13 @@ The extension works automatically once installed:
 ## File Structure
 
 \`\`\`
-auto-translate-extension/
+force-inline-auto-translate/
 │
-├── manifest.json          # Extension configuration
-├── content.js            # Main content script with translation logic
-├── background.js         # Service worker for domain memory
-├── icon.png             # Extension icon (add your own)
-└── README.md            # This file
+├── manifest.json          # Extension configuration (MV3)
+├── content.js             # Main content script with translation + right-click logic
+├── background.js          # Service worker for domain memory + ON/OFF toggle
+├── icon.png               # Extension icon (add your own)
+└── README.md              # This file
 \`\`\`
 
 ## Technical Details
@@ -109,11 +124,14 @@ auto-translate-extension/
 
 ### Translation Triggering Process
 
-1. **Detection Phase**: Checks HTML lang attribute, meta tags, and text content for language
-2. **Blocker Removal**: Removes CSP, notranslate attributes, and blocking classes
-3. **Event Dispatch**: Triggers comprehensive DOM events to activate Chrome's translation
-4. **Verification**: Monitors for translation widget appearance
-5. **Domain Save**: Stores successful domain for faster future processing
+### Translation Triggering Process
+
+1. **Detection Phase**: Checks HTML `lang` attribute, meta tags, and (if needed) text content for language
+2. **ON/OFF Check**: Asks the background script if the extension is enabled (`checkEnabled`)
+3. **Blocker Removal**: Removes CSP meta tags (when present), `notranslate` / `skiptranslate` attributes, and blocking classes
+4. **Event Dispatch**: Dispatches a reduced but targeted set of DOM events to nudge Chrome's translation system
+5. **Context Menu & Visibility Tricks**: Simulates right-clicks and visibility changes to further encourage translation UI
+6. **Domain Save**: Stores domains in background (`saveDomain`) for faster future processing
 
 ### Right-Click Enablement
 
@@ -125,9 +143,11 @@ auto-translate-extension/
 ### Domain Memory
 
 1. Background service worker maintains a dictionary of processed domains
-2. Each domain entry includes first-added and last-processed timestamps
-3. Stored in Chrome's local storage API for persistence
-4. Content script queries background for domain status on each page load
+2. Each domain entry includes:
+   - `added`: first time the domain was seen
+   - `lastProcessed`: last time the domain was visited/processed
+3. Stored in Chrome's local storage API (`chrome.storage.local`) for persistence
+4. Content script queries the background for domain status on each page load via `checkDomain`
 
 ## Privacy
 

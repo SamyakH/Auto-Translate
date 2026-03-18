@@ -1,4 +1,4 @@
-(function() {
+(function () {
   'use strict';
 
   // Prevent multiple executions
@@ -306,35 +306,26 @@
             console.warn('Failed to create trigger elements:', e);
           }
           
-          // Step 3: Massive event dispatching
+           // Step 3: Targeted event dispatching (fewer, faster)
           setTimeout(() => {
-            console.log('Dispatching comprehensive translation trigger events...');
-            
+            console.log('Dispatching targeted translation trigger events...');
+
             const eventSequence = [
               { name: 'DOMContentLoaded', target: document },
               { name: 'load', target: window },
-              { name: 'resize', target: window },
-              { name: 'focus', target: window },
-              { name: 'blur', target: window },
               { name: 'focus', target: window },
               { name: 'visibilitychange', target: document },
-              { name: 'pageshow', target: window },
-              { name: 'pagehide', target: window },
-              { name: 'pageshow', target: window },
               { name: 'scroll', target: window },
               { name: 'wheel', target: window },
               { name: 'mousemove', target: document },
-              { name: 'mouseenter', target: document.body },
-              { name: 'mouseleave', target: document.body },
               { name: 'keydown', target: document },
-              { name: 'keyup', target: document },
-              { name: 'input', target: document },
-              { name: 'change', target: document },
-              { name: 'hashchange', target: window }
+              { name: 'keyup', target: document }
             ];
-            
-            // Fire events in multiple rounds
-            for (let round = 0; round < 7; round++) {
+
+            const rounds = 3;
+            const stepDelay = 60; // ms between events
+
+            for (let round = 0; round < rounds; round++) {
               eventSequence.forEach((eventConfig, index) => {
                 setTimeout(() => {
                   try {
@@ -356,17 +347,18 @@
                         cancelable: true 
                       });
                     }
-                    
+
                     eventConfig.target.dispatchEvent(event);
                     console.log(`✅ Round ${round + 1}: Dispatched ${eventConfig.name} event`);
                   } catch (e) {
                     console.warn(`❌ Failed to dispatch ${eventConfig.name} event:`, e);
                   }
-                }, (round * eventSequence.length + index) * 100);
+                }, (round * eventSequence.length + index) * stepDelay);
               });
             }
-            
+
             // Step 4: Additional Chrome-specific triggers
+            const totalEventDuration = rounds * eventSequence.length * stepDelay;
             setTimeout(() => {
               try {
                 const originalTitle = document.title;
@@ -411,9 +403,9 @@
                 console.warn('Additional triggers failed:', e);
               }
               
-              // Silent completion - no UI elements created
+               // Silent completion - no UI elements created
               console.log('🎯 Translation triggering completed silently');
-            }, eventSequence.length * 7 * 100 + 1000);
+            }, totalEventDuration + 800);
             
           }, 400);
         }, 300);
@@ -425,15 +417,14 @@
   }
 
   function waitForPageFullyLoaded() {
-    console.log('⏳ Waiting for page to fully load...');
-    
+    console.log('⏳ Waiting briefly for page to be ready...');
+
     const checkLoaded = () => {
-      const readyStateComplete = document.readyState === 'complete';
+      const readyStateOK = document.readyState === 'interactive' || document.readyState === 'complete';
       const hasBody = !!document.body;
-      const hasContent = document.body && document.body.textContent.length > 100;
-      
-      if (readyStateComplete && hasBody && hasContent) {
-        console.log('✅ Page fully loaded');
+
+      if (readyStateOK && hasBody) {
+        console.log('✅ Page sufficiently loaded for translation');
         pageFullyLoaded = true;
         return true;
       }
@@ -450,18 +441,18 @@
           clearInterval(checkInterval);
           resolve();
         }
-      }, 500);
+      }, 300);
 
       setTimeout(() => {
         clearInterval(checkInterval);
         pageFullyLoaded = true;
-        console.log('⏰ Page load timeout, proceeding');
+        console.log('⏰ Page readiness timeout, proceeding anyway');
         resolve();
-      }, 8000);
+      }, 4000);
     });
   }
 
-  function saveDomain() {
+  const saveDomain = function() {
     try {
       chrome.runtime.sendMessage({ action: 'saveDomain' }, (response) => {
         if (chrome.runtime.lastError) {
@@ -473,7 +464,7 @@
     } catch (error) {
       console.error('Save domain failed:', error);
     }
-  }
+  };
 
   // Main execution with all features - SILENT MODE
   async function init() {
@@ -481,33 +472,58 @@
       console.log('Initialization already completed');
       return;
     }
-    
+
     try {
       console.log('🚀 Initializing Complete Auto Translate Extension (Silent Mode)...');
-      
-      const pageLanguage = detectLanguage();
-      const browserLanguage = getBrowserLanguage();
-      
-      if (!pageLanguage || pageLanguage === browserLanguage) {
-        console.log('❌ No translation needed');
+
+      // Check if extension is enabled via background
+      let enabled = true;
+      try {
+        enabled = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({ action: 'checkEnabled' }, (response) => {
+            if (chrome.runtime.lastError) {
+              console.warn('Could not check enabled state, assuming enabled:', chrome.runtime.lastError);
+              resolve(true);
+              return;
+            }
+            resolve(response?.enabled !== false);
+          });
+        });
+      } catch (e) {
+        console.warn('Enabled state check failed, assuming enabled:', e);
+        enabled = true;
+      }
+
+      if (!enabled) {
+        console.log('⛔ Extension is OFF for this profile/tab, skipping translation logic');
+        initializationComplete = true;
         return;
       }
-      
+
+      const pageLanguage = detectLanguage();
+      const browserLanguage = getBrowserLanguage();
+
+      if (!pageLanguage || pageLanguage === browserLanguage) {
+        console.log('❌ No translation needed');
+        initializationComplete = true;
+        return;
+      }
+
       console.log('✅ Foreign language detected - Activating all features silently');
       initializationComplete = true;
 
       // Wait for page to be fully loaded
       await waitForPageFullyLoaded();
-      
+
       // Enable right-click functionality FIRST
       enableRightClick();
-      
+
       // Remove translation blockers
       if (!removeBlockers()) {
         console.error('❌ Failed to remove translation blockers');
         return;
       }
-      
+
       // Check domain for domain memory feature
       try {
         chrome.runtime.sendMessage({ action: 'checkDomain' }, (response) => {
@@ -516,13 +532,13 @@
             setTimeout(() => triggerChromeTranslation(), 1000);
             return;
           }
-          
-          if (response?.shouldProcess) {
-            console.log('🔄 Domain remembered - processing immediately');
-            setTimeout(() => triggerChromeTranslation(), 800);
+
+         if (response?.shouldProcess) {
+            console.log('🔄 Domain remembered - processing quickly');
+            setTimeout(() => triggerChromeTranslation(), 400);
           } else {
             console.log('🆕 New domain - processing and remembering');
-            setTimeout(() => triggerChromeTranslation(), 1000);
+            setTimeout(() => triggerChromeTranslation(), 600);
             saveDomain();
           }
         });
@@ -530,7 +546,7 @@
         console.error('❌ Runtime error:', error);
         setTimeout(() => triggerChromeTranslation(), 1000);
       }
-      
+
     } catch (error) {
       console.error('❌ Initialization failed:', error);
     }
@@ -539,13 +555,12 @@
   // Start initialization with all timing strategies
   function startInit() {
     console.log(`🔧 Starting silent init (readyState: ${document.readyState})`);
-    
+
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', init);
-    } else if (document.readyState === 'interactive') {
-      setTimeout(init, 600);
     } else {
-      setTimeout(init, 400);
+      // interactive or complete: start immediately
+      init();
     }
   }
 
@@ -555,14 +570,14 @@
   window.addEventListener('load', () => {
     if (!pageFullyLoaded && !initializationComplete) {
       console.log('🔄 Window load backup initialization');
-      setTimeout(init, 1200);
+      setTimeout(init, 600);
     }
   });
 
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && !initializationComplete) {
       console.log('👁️ Page visible backup initialization');
-      setTimeout(init, 1500);
+      setTimeout(init, 800);
     }
   });
 
@@ -572,8 +587,7 @@
       console.log('🕐 Final backup initialization');
       init();
     }
-  }, 5000);
+  }, 3500);
 
-  console.log('🎉 Complete Auto Translate Extension Loaded (Silent Mode - All Features + Right-Click Enabled)');
-
+ console.log('🎉 Complete Auto Translate Extension Loaded (Silent Mode - All Features + Right-Click Enabled)');
 })();
