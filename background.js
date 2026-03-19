@@ -38,16 +38,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     switch (message.action) {
-      case 'checkDomain':
-        const wasProcessed = !!processedDomains[hostname];
-        if (wasProcessed) {
-          processedDomains[hostname].lastProcessed = Date.now();
-          chrome.storage.local.set({ processedDomains });
-        }
-        console.log(`Domain check: ${hostname} - ${wasProcessed ? 'remembered' : 'new'}`);
-        sendResponse({ shouldProcess: wasProcessed });
-        break;
-
       case 'saveDomain':
         processedDomains[hostname] = {
           added: Date.now(),

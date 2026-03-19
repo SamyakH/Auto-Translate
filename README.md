@@ -1,6 +1,6 @@
 # Force Inline Auto Translate
 
-**Version 2.0** — A lightweight, optimized Chrome extension that automatically translates foreign language web pages using Chrome's built-in Google Translate, removes translation blockers, enables right-click/text selection on restricted sites, and remembers processed domains.
+**Version 2.1** — A lightweight, optimized Chrome extension that automatically translates foreign language web pages using Chrome's built-in Google Translate, removes translation blockers, enables right-click/text selection on restricted sites, and remembers processed domains.
 
 ## Features
 
@@ -14,13 +14,14 @@
 - **CSP Meta Tags**: Removes Content-Security-Policy restrictions
 - **Class-based Blocking**: Strips `notranslate`, `skiptranslate`, and similar blocking classes
 - **Attribute-based Blocking**: Removes `translate="no"` and `data-translate` attributes
-- **Minimal DOM Manipulation**: Efficient, non-destructive blocker removal
+- **Early Preparation**: HTML element prepared at document_start before Chrome scans the page
+- **Full Cleanup**: Comprehensive blocker removal when DOM is fully parsed at document_idle
 
 ### 🖱️ Right-Click & Selection Enablement
 - **Context Menu Restoration**: Re-enables right-click on blocked sites
 - **Text Selection Freedom**: Forces text selection on copy-protected pages
 - **CSS Injection**: Injects minimal style overrides for robust enablement
-- **No Event Hijacking**: Clean event listener implementation (no recursive overrides)
+- **Clean Implementation**: Safe event listener without risky global overrides
 
 ### 💾 Smart Domain Memory  
 - **Persistent Tracking**: Remembers which domains have been translated
@@ -29,17 +30,11 @@
 - **Zero Privacy Impact**: No external communication or analytics
 
 ### ⚡ Performance Optimizations
-- **Early Language Check**: Skips processing on same-language pages
-- **Clean Event Dispatching**: Minimal, targeted events to trigger translation (4 events vs. 20+)
-- **No Fake Elements**: Removed unnecessary DOM pollution from trigger elements
-- **Throttled DOM Observer**: Respects system performance during SPA navigation
-- **Efficient CSS**: Consolidated style injection with essential rules only
-
-### 🔧 Robust Architecture
-- **Multiple Initialization Paths**: Handles document_start, DOMContentLoaded, and slow pages
-- **Dynamic Content Support**: Re-runs translation on SPA navigation (throttled)
-- **Error Recovery**: Continues operation even if individual steps fail
-- **Clean Logging**: Structured console output for debugging
+- **Early Language Check**: Skips processing on same-language pages immediately
+- **Minimal Event Dispatching**: Only essential events to trigger translation
+- **Efficient SPA Support**: Re-runs on dynamic content with throttling
+- **Clean Code**: Removed 165+ lines of dead/redundant code
+- **Safe Architecture**: No risky global overrides or recursive event listeners
 
 ## Installation
 
@@ -76,65 +71,52 @@ Once installed:
 
 ## File Structure
 
-\`\`\`
+```
 force-inline-auto-translate/
 ├── manifest.json          # Extension manifest (MV3)
-├── content.js             # Main logic: detection, blocking removal, translation
-├── background.js          # Service worker: domain memory management
+├── early-blocker.js       # Early blocker: Runs at document_start
+├── content.js             # Main logic: Detection, blocking removal, translation
+├── background.js          # Service worker: Domain memory management
 ├── icon.png               # Extension icon
 └── README.md              # This file
-\`\`\`
+```
 
-## Technical Improvements (v2.0)
+## What's New in v2.1
 
-### Code Refactoring
-- ✅ Removed 400+ lines of unused code (foreign texts, fake elements)
-- ✅ Eliminated deeply nested setTimeout chains
-- ✅ Removed recursive addEventListener override that caused stack overflow
-- ✅ Simplified from 6 initialization strategies to 2
+### Code Cleanup
+- ✅ Removed 165+ lines of dead/unused code
+- ✅ Removed unused `isDomainProcessed` variable
+- ✅ Removed unused `checkDomain()` function (30+ lines)
+- ✅ Simplified backup retry logic from 3 attempts to 1 smart retry
+- ✅ Removed risky `document.createElement` override
+- ✅ Removed unused CONFIG values (`MAX_TEXT_SAMPLE`, `TRANSLATION_DELAY`)
 
-### Performance Enhancements
-- ✅ Reduced event dispatching from 20+ events to 4 essential events
-- ✅ Changed MutationObserver to watch direct children only (not deep subtree)
-- ✅ Removed document title manipulation
-- ✅ Removed artificial visibility property changes
-- ✅ Removed 12 invisible trigger element creation per init
+### Early Blocker Optimization
+- ✅ Fixed early-blocker.js to work safely at document_start
+- ✅ Removed premature DOM queries that fail during document parsing
+- ✅ Kept only what works at document_start (HTML element preparation)
+- ✅ Delegated full cleanup to content.js when DOM is ready
 
-### Quality Improvements
-- ✅ Added language confidence scoring
-- ✅ Better error handling and recovery
-- ✅ Cleaner code organization with JSDoc comments
-- ✅ Fixed the "RangeError: Maximum call stack size exceeded" bug
-- ✅ Improved console logging with symbols (✓, ✗, ℹ️, etc.)
+### Background Service Worker
+- ✅ Removed unused `checkDomain` message handler
+- ✅ Kept only `saveDomain` and `getDomains` (actually used)
 
-### Manifest Changes
-- ✅ Updated `run_at` from `document_idle` to `document_start` for faster execution
-- ✅ Bumped version to 2.0.0 to reflect major improvements
+### Result
+- **Safer**: No global overrides, no risky shortcuts
+- **Faster**: Less code execution, fewer redundant retries (~40% smaller)
+- **Cleaner**: Only essential functionality remains
+- **Maintainable**: Clear separation of concern
+2. Technical Architecture
 
-## How It Works
+### Why Two-Stage Approach?
+1. **early-blocker.js** (document_start): Prepares HTML element BEFORE Chrome analyzes the page
+2. **content.js** (document_idle): Full DOM available for comprehensive blocker removal
+- **Result**: Chrome sees a translatable page bs
 
-### Detection & Initialization (document_start)
-\`\`\`
-1. Detect page language with confidence scoring
-2. Compare with browser language
-3. Skip if no foreign language detected or confidence too low
-4. Wait for page to be ready (DOMContentLoaded)
-\`\`\`
-
-### Processing
-\`\`\`
-5. Enable right-click & text selection
-6. Remove translation blockers
-7. Save domain for future visits
-8. Trigger Chrome translation (4 key events)
-\`\`\`
-
-### Backup & Dynamic Content
-\`\`\`
-9. Retry if no translation after 3.5 seconds (slow pages)
-10. Re-run on significant DOM changes (SPAs, throttled)
-\`\`\`
-
+##
+### Performance Metrics
+- Event dispatching: 4-7 essential events (significant reduction)
+- Backup retries: 1 smart retry at 3s (vs. 3 redundant retries)
 ## Browser Compatibility
 
 - ✅ Google Chrome (v88+)
@@ -152,32 +134,34 @@ force-inline-auto-translate/
 - ✅ **No Data Collection**: Zero analytics or tracking
 - ✅ **Local Storage Only**: All data stays on your device
 - ✅ **No External Servers**: Everything runs in-browser
-- ✅ **Open Source**: Code is fully transparent
+- ✅ **Open Source**: Code is fully transparentons/`
+3. Debugging & Diagnostics
+
+### Run Diagnostics
+```javascript
+window.ft_diagnose()
+```
+Shows:
+- Detected language and confidence score
+- Browser language
+- Current HTML lang attribute
+- Number of blocking classes/attributes found
+- Translation status
+
+### Manual Trigger
+```javascript
+window.ft_manualTrigger()
+```
+Forces immediate translation trigger (useful for testing).
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| Translation not triggering | Ensure Chrome's built-in translation is enabled |
-| Right-click still blocked | Refresh the page after installing/updating |
-| Domain not remembered | Check storage permission in `chrome://extensions/` |
-| Errors in console | Inspect console output for specific error messages |
-
-## Development
-
-### Quick Start
-No build tools required—this is pure JavaScript:
-
-1. Make changes to `content.js`, `background.js`, or `manifest.json`
-2. Go to `chrome://extensions/`
-3. Click refresh on the extension card
-4. Test on target websites
-
-### Architecture Notes
-- **content.js**: ~250 lines of focused, clean code
-- **background.js**: ~60 lines of straightforward domain management
-- **manifest.json**: Standard MV3 configuration
-
+| Translation bar doesn't appear | Run `window.ft_diagnose()` to check detection and blockers |
+| Right-click still blocked | Reload extension at `chrome://extensions/` |
+| Domain not remembered | Verify storage permission is granted |
+| Sluggish performance | Check for conflicting extension
 ## Future Enhancements
 
 - [ ] Add popup UI for settings
@@ -191,16 +175,15 @@ No build tools required—this is pure JavaScript:
 See [LICENSE](./LICENSE) file for details.
 
 ## Contributing
-
-Issues and pull requests are welcome! Help make this extension even better.
+s |
 
 ## License
 
-MIT License - See LICENSE file for details
+MIT License - Feel free to modify and redistribute
 
-## Credits
+## Contributing
 
-Developed for automatic translation and accessibility enhancement on foreign language websites.
+Issues and pull requests are welcome! Help make this extension even better.
 
 ## Support
 

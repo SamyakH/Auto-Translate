@@ -11,9 +11,7 @@
 
   // Configuration
   const CONFIG = {
-    MAX_TEXT_SAMPLE: 1000,
     PAGE_LOAD_TIMEOUT: 4000,
-    TRANSLATION_DELAY: 400,
     SPA_REINIT_INTERVAL: 5000,
     MIN_LANGUAGE_CONFIDENCE: 0.5
   };
@@ -31,7 +29,6 @@
 
   // State tracking
   let translationAttempted = false;
-  let isDomainProcessed = false;
 
   console.log('🌍 Auto Translate Extension: Enhanced Version - Optimized');
 
@@ -59,7 +56,7 @@
       
       // Method 3: Text-based script detection
       const textSample = document.body?.textContent?.substring(0, CONFIG.MAX_TEXT_SAMPLE) || '';
-      if (!textSample) return null;
+      if (!textSample) return null;1000
 
       for (const [lang, pattern] of Object.entries(LANGUAGE_PATTERNS)) {
         if (pattern.regex.test(textSample)) {
@@ -220,27 +217,6 @@
   }
 
   /**
-   * Check if domain was already processed
-   */
-  function checkDomain() {
-    return new Promise((resolve) => {
-      if (!chrome?.runtime?.sendMessage) {
-        resolve(false);
-        return;
-      }
-
-      chrome.runtime.sendMessage({ action: 'checkDomain' }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.warn('checkDomain failed:', chrome.runtime.lastError);
-          resolve(false);
-        } else {
-          resolve(response?.shouldProcess || false);
-        }
-      });
-    });
-  }
-
-  /**
    * Save domain to processed list
    */
   function saveDomain() {
@@ -272,7 +248,6 @@
 
       const { lang: sourceLang, confidence } = detectionResult;
       const browserLang = getBrowserLanguage();
-      
       console.log(`📊 Detected: ${sourceLang}, Browser: ${browserLang}, Confidence: ${confidence.toFixed(2)}`);
       
       if (sourceLang === browserLang) {
@@ -417,44 +392,14 @@
       console.log('⏱️  Backup 3 (6s): Final attempt with extra triggers...');
       translationAttempted = false;
       void init();
-      
-      // Extra aggressive final trigger
-      const finalTrigger = () => {
-        try {
-          const md = new MouseEvent('mousemove', { bubbles: true });
-          document.documentElement.dispatchEvent(md);
-          window.dispatchEvent(new Event('focus'));
-          document.dispatchEvent(new Event('visibilitychange'));
-          console.log('✓ Final aggressive trigger dispatched');
-        } catch (e) {
-          console.warn('Final trigger failed:', e);
-        }
-      };
-      setTimeout(finalTrigger, 1000);
-    }
-  }, 6000);
-
-  // SPA/dynamic content detection
-  try {
-    let lastInit = 0;
-    const observer = new MutationObserver(() => {
-      const now = Date.now();
-      if (now - lastInit < CONFIG.SPA_REINIT_INTERVAL) return;
-      
-      lastInit = now;
-      console.log('🔁 DOM changed, re-checking translation...');
+     Retry translation for stubborn pages
+  setTimeout(() => {
+    if (!translationAttempted) {
+      console.log('⏱️  Retry (3s): No translation yet, retrying...');
       translationAttempted = false;
       void init();
-    });
-
-    observer.observe(document.documentElement || document.body, {
-      childList: true,
-      subtree: false // Only observe direct children, not deep tree
-    });
-  } catch (e) {
-    console.warn('SPA observer failed:', e);
-  }
-
+    }
+  }, 3
   // Expose diagnostic helper to window for debugging
   window.ft_diagnose = function() {
     console.log('%c=== Force Inline Translate Diagnostics ===', 'color: blue; font-weight: bold; font-size: 14px');
