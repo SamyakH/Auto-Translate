@@ -1,5 +1,3 @@
-// Main execution with all features - SILENT MODE
- async function init() {
 # IDE and Editor files
 .vscode/
 .idea/

@@ -1,9 +1,7 @@
 (function () {
   'use strict';
 
-  // Prevent multiple executions
-  if (window.translationBlockersRemoved) return;
-  window.translationBlockersRemoved = true;
+ // Allow re-execution to support SPA and dynamic content
 
   // Skip chrome:// pages, extension pages, and iframes
   if (location.protocol === 'chrome:' || 
@@ -13,9 +11,17 @@
     return;
   }
 
-  let pageFullyLoaded = false;
+    let pageFullyLoaded = false;
   let translationAttempted = false;
   let initializationComplete = false;
+
+  // Early language check to skip everything on same-language pages
+  const initialPageLanguage = detectLanguage();
+  const initialBrowserLanguage = getBrowserLanguage();
+  if (!initialPageLanguage || initialPageLanguage === initialBrowserLanguage) {
+    console.log('✅ Page language matches browser or undetected; skipping auto-translate logic completely');
+    return;
+  }
 
   // Define foreignTexts at top level to avoid scoping issues
   const foreignTexts = {
@@ -311,20 +317,14 @@
             console.log('Dispatching targeted translation trigger events...');
 
             const eventSequence = [
-              { name: 'DOMContentLoaded', target: document },
               { name: 'load', target: window },
               { name: 'focus', target: window },
               { name: 'visibilitychange', target: document },
-              { name: 'scroll', target: window },
-              { name: 'wheel', target: window },
-              { name: 'mousemove', target: document },
-              { name: 'keydown', target: document },
-              { name: 'keyup', target: document }
+              { name: 'mousemove', target: document }
             ];
 
-            const rounds = 3;
-            const stepDelay = 60; // ms between events
-
+            const rounds = 1;
+            const stepDelay = 80; // ms between events
             for (let round = 0; round < rounds; round++) {
               eventSequence.forEach((eventConfig, index) => {
                 setTimeout(() => {
@@ -467,49 +467,15 @@
   };
 
   // Main execution with all features - SILENT MODE
-  async function init() {
-    if (initializationComplete) {
-      console.log('Initialization already completed');
-      return;
-    }
-
+ async function init() {
+    // Allow multiple runs on SPA/dynamic pages (do not hard-stop)
     try {
       console.log('🚀 Initializing Complete Auto Translate Extension (Silent Mode)...');
 
-      // Check if extension is enabled via background
-      let enabled = true;
-      try {
-        enabled = await new Promise((resolve) => {
-          chrome.runtime.sendMessage({ action: 'checkEnabled' }, (response) => {
-            if (chrome.runtime.lastError) {
-              console.warn('Could not check enabled state, assuming enabled:', chrome.runtime.lastError);
-              resolve(true);
-              return;
-            }
-            resolve(response?.enabled !== false);
-          });
-        });
-      } catch (e) {
-        console.warn('Enabled state check failed, assuming enabled:', e);
-        enabled = true;
-      }
+      const pageLanguage = initialPageLanguage;
+      const browserLanguage = initialBrowserLanguage;
 
-      if (!enabled) {
-        console.log('⛔ Extension is OFF for this profile/tab, skipping translation logic');
-        initializationComplete = true;
-        return;
-      }
-
-      const pageLanguage = detectLanguage();
-      const browserLanguage = getBrowserLanguage();
-
-      if (!pageLanguage || pageLanguage === browserLanguage) {
-        console.log('❌ No translation needed');
-        initializationComplete = true;
-        return;
-      }
-
-      console.log('✅ Foreign language detected - Activating all features silently');
+      console.log(`✅ Foreign language detected (${pageLanguage}) vs browser (${browserLanguage}) - Activating all features silently`);
       initializationComplete = true;
 
       // Wait for page to be fully loaded
@@ -524,28 +490,14 @@
         return;
       }
 
-      // Check domain for domain memory feature
+     // Always trigger translation; domain memory is best-effort only
       try {
-        chrome.runtime.sendMessage({ action: 'checkDomain' }, (response) => {
-          if (chrome.runtime.lastError) {
-            console.warn('⚠️ Background script communication failed');
-            setTimeout(() => triggerChromeTranslation(), 1000);
-            return;
-          }
-
-         if (response?.shouldProcess) {
-            console.log('🔄 Domain remembered - processing quickly');
-            setTimeout(() => triggerChromeTranslation(), 400);
-          } else {
-            console.log('🆕 New domain - processing and remembering');
-            setTimeout(() => triggerChromeTranslation(), 600);
-            saveDomain();
-          }
-        });
+        saveDomain();
       } catch (error) {
-        console.error('❌ Runtime error:', error);
-        setTimeout(() => triggerChromeTranslation(), 1000);
+        console.warn('Domain save failed, continuing anyway:', error);
       }
+
+      setTimeout(() => triggerChromeTranslation(), 400);
 
     } catch (error) {
       console.error('❌ Initialization failed:', error);
@@ -557,37 +509,64 @@
     console.log(`🔧 Starting silent init (readyState: ${document.readyState})`);
 
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', init);
+      document.addEventListener('DOMContentLoaded', () => {
+        initializationComplete = false;
+        translationAttempted = false;
+        init();
+      }, { once: true });
     } else {
       // interactive or complete: start immediately
+      initializationComplete = false;
+      translationAttempted = false;
       init();
     }
   }
 
   startInit();
 
-  // Backup initialization strategies
-  window.addEventListener('load', () => {
-    if (!pageFullyLoaded && !initializationComplete) {
-      console.log('🔄 Window load backup initialization');
-      setTimeout(init, 600);
-    }
-  });
-
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && !initializationComplete) {
-      console.log('👁️ Page visible backup initialization');
-      setTimeout(init, 800);
-    }
-  });
-
-  // Additional backup for dynamic pages
   setTimeout(() => {
-    if (!initializationComplete) {
-      console.log('🕐 Final backup initialization');
-      init();
-    }
+    console.log('🕐 Late backup initialization (slow page)');
+    initializationComplete = false;
+    translationAttempted = false;
+    init();
   }, 3500);
+
+  // SPA / large in-page content change detection (throttled)
+  try {
+    let lastReinitTime = 0;
+    const REINIT_MIN_INTERVAL = 5000; // ms
+
+    const observer = new MutationObserver((mutations) => {
+      let significantChange = false;
+      for (const m of mutations) {
+        if (m.addedNodes && m.addedNodes.length > 0) {
+          significantChange = true;
+          break;
+        }
+      }
+      if (!significantChange) return;
+
+      const now = Date.now();
+      if (now - lastReinitTime < REINIT_MIN_INTERVAL) {
+        // Too soon since last re-init, skip to avoid lag
+        return;
+      }
+      lastReinitTime = now;
+
+      console.log('🔁 Detected significant DOM change – re-running translation flow (throttled)');
+      initializationComplete = false;
+      translationAttempted = false;
+      pageFullyLoaded = false;
+      waitForPageFullyLoaded().then(init);
+    });
+
+    observer.observe(document.documentElement || document.body, {
+      childList: true,
+      subtree: true
+    });
+  } catch (e) {
+    console.warn('SPA mutation observer setup failed:', e);
+  }
 
  console.log('🎉 Complete Auto Translate Extension Loaded (Silent Mode - All Features + Right-Click Enabled)');
 })();

@@ -1,7 +1,6 @@
 # Force Inline Auto Translate
 
-A powerful Chrome/Chromium extension that automatically translates foreign language web pages using Chrome's built-in Google Translate, removes translation blockers, enables right-click/text selection on restricted sites, and remembers processed domains for faster subsequent translations. It also includes a simple ON/OFF toggle on the toolbar.
-
+A powerful Chrome/Chromium extension that automatically translates foreign language web pages using Chrome's built-in Google Translate, removes translation blockers, enables right-click/text selection on restricted sites, and remembers processed domains for faster subsequent translations. The extension is always on and requires no manual toggle.
 ## Features
 
 ### 🌐 Automatic Translation

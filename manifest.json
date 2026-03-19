@@ -1,6 +1,6 @@
 {
   "name": "Force Inline Auto Translate",
-  "description": "Automatically translates foreign pages using Chrome's built-in translation, removes blockers, enables right-click, and remembers domains. Includes ON/OFF toggle.",
+    "description": "Automatically translates foreign pages using Chrome's built-in translation, removes blockers, enables right-click, and remembers domains. Always on, no toggle needed.",
   "version": "1.1",
   "manifest_version": 3,
 
