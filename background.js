@@ -1,60 +1,79 @@
-let processedDomains = {};
-// Extension is always enabled now
+/**
+ * Background Service Worker
+ * Manages domain processing memory and content communication
+ */
 
-// Load saved processed domains on startup
+'use strict';
+
+let processedDomains = {};
+
+// Load persisted domains on startup
 chrome.storage.local.get(['processedDomains'], (data) => {
   if (data.processedDomains) {
     processedDomains = data.processedDomains;
-    console.log('Loaded processed domains:', Object.keys(processedDomains).length);
+    console.log(`✅ Loaded ${Object.keys(processedDomains).length} processed domains`);
   }
 });
 
-// Listen for messages from content scripts
+/**
+ * Get hostname from URL
+ */
+function getHostname(url) {
+  try {
+    return new URL(url).hostname;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Handle messages from content scripts
+ */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   try {
-   // Extension is always enabled now; no checkEnabled branch
-
-   if (message.action === 'checkDomain' && sender.tab?.url) {
-      const hostname = new URL(sender.tab.url).hostname;
-      const entry = processedDomains[hostname];
-      const shouldProcess = !!entry;
-
-      if (entry) {
-        entry.lastProcessed = Date.now();
-        chrome.storage.local.set({ processedDomains });
-      }
-
-      console.log(`Domain check for ${hostname}: ${shouldProcess ? 'remembered' : 'new'}`);
-      sendResponse({ shouldProcess });
+    const hostname = getHostname(sender.tab?.url);
+    if (!hostname) {
+      sendResponse({ error: 'Invalid URL' });
       return true;
     }
 
-    if (message.action === 'saveDomain' && sender.tab?.url) {
-      const hostname = new URL(sender.tab.url).hostname;
-      processedDomains[hostname] = {
-        added: Date.now(),
-        lastProcessed: Date.now()
-      };
-
-      chrome.storage.local.set({ processedDomains }, () => {
-        if (chrome.runtime.lastError) {
-          console.error('Failed to save domain:', chrome.runtime.lastError);
-        } else {
-          console.log(`Domain saved: ${hostname}`);
+    switch (message.action) {
+      case 'checkDomain':
+        const wasProcessed = !!processedDomains[hostname];
+        if (wasProcessed) {
+          processedDomains[hostname].lastProcessed = Date.now();
+          chrome.storage.local.set({ processedDomains });
         }
-      });
+        console.log(`Domain check: ${hostname} - ${wasProcessed ? 'remembered' : 'new'}`);
+        sendResponse({ shouldProcess: wasProcessed });
+        break;
 
-      sendResponse({ success: true });
-      return true;
+      case 'saveDomain':
+        processedDomains[hostname] = {
+          added: Date.now(),
+          lastProcessed: Date.now()
+        };
+        chrome.storage.local.set({ processedDomains }, () => {
+          if (chrome.runtime.lastError) {
+            console.error(`Failed to save ${hostname}:`, chrome.runtime.lastError);
+          } else {
+            console.log(`✅ Domain saved: ${hostname}`);
+          }
+        });
+        sendResponse({ success: true });
+        break;
+
+      case 'getDomains':
+        sendResponse({ domains: processedDomains });
+        break;
+
+      default:
+        sendResponse({ error: 'Unknown action' });
     }
-
-    if (message.action === 'getDomains') {
-      sendResponse({ domains: processedDomains });
-      return true;
-    }
-
- } catch (error) {
-    console.error('Background script error:', error);
+    
+    return true;
+  } catch (error) {
+    console.error('Message handler error:', error);
     try {
       sendResponse({ error: error.message });
     } catch (e) {
@@ -62,9 +81,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     return true;
   }
-
-  return false;
 });
-
-
-// No action click handler anymore – extension is always on
