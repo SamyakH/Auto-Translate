@@ -139,16 +139,21 @@
   }
 
   /**
-   * Remove translation blockers
+   * Remove translation blockers aggressively
    */
   function removeBlockers() {
     try {
       console.log('🚫 Removing translation blockers...');
       
       // Remove CSP meta tags
+      let cspCount = 0;
       document.querySelectorAll('meta[http-equiv*="Content-Security-Policy"]').forEach(el => {
-        try { el.remove(); } catch (e) { console.warn('Failed to remove CSP meta:', e); }
+        try { 
+          el.remove(); 
+          cspCount++;
+        } catch (e) { console.warn('Failed to remove CSP meta:', e); }
       });
+      if (cspCount > 0) console.log(`✓ Removed ${cspCount} CSP meta tags`);
 
       // Set HTML to translate
       const html = document.documentElement;
@@ -156,6 +161,7 @@
       html.classList.remove('notranslate', 'skiptranslate');
       html.removeAttribute('data-translate');
       html.removeAttribute('data-notranslate');
+      console.log('✓ HTML element: translate="yes" + removed blocking classes');
       
       // Remove blocking classes/attributes from elements
       const blockingSelectors = [
@@ -163,8 +169,15 @@
         '[translate="no"]', '[data-translate="no"]', '[data-notranslate]'
       ];
       
+      let totalModified = 0;
       blockingSelectors.forEach(selector => {
-        document.querySelectorAll(selector).forEach(el => {
+        const elements = document.querySelectorAll(selector);
+        if (elements.length > 0) {
+          console.log(`✓ Found ${elements.length} elements with: ${selector}`);
+          totalModified += elements.length;
+        }
+        
+        elements.forEach(el => {
           try {
             el.classList.remove('notranslate', 'skiptranslate', 'no-translate', 'dont-translate');
             el.removeAttribute('translate');
@@ -175,97 +188,11 @@
         });
       });
       
-      console.log('✅ Blockers removed');
+      console.log(`✅ Removed blockers from ${totalModified} elements`);
       return true;
     } catch (error) {
       console.error('Failed to remove blockers:', error);
       return false;
-    }
-  }
-
-  /**
-   * Trigger Chrome's built-in translation
-   */
-  function triggerChromeTranslation(sourceLang) {
-    if (translationAttempted) return;
-    translationAttempted = true;
-
-    try {
-      console.log(`🔄 Triggering Chrome translation (${sourceLang})...`);
-      
-      const html = document.documentElement;
-      
-      // Step 1: Set language attributes on multiple elements
-      html.removeAttribute('lang');
-      html.removeAttribute('xml:lang');
-      
-      setTimeout(() => {
-        html.lang = sourceLang;
-        html.setAttribute('xml:lang', sourceLang);
-        if (document.body) {
-          document.body.lang = sourceLang;
-        }
-        console.log(`✓ Set language to: ${sourceLang}`);
-        
-        // Step 2: Dispatch key events to multiple targets
-        setTimeout(() => {
-          const eventConfigs = [
-            { name: 'load', target: window },
-            { name: 'focus', target: window },
-            { name: 'focusin', target: document },
-            { name: 'DOMContentLoaded', target: document },
-            { name: 'visibilitychange', target: document },
-            { name: 'pageshow', target: window },
-            { name: 'mousemove', target: document },
-            { name: 'mousemove', target: html },
-            { name: 'mousemove', target: document.body }
-          ];
-          
-          eventConfigs.forEach(config => {
-            try {
-              let event;
-              if (config.name === 'mousemove') {
-                event = new MouseEvent(config.name, { 
-                  bubbles: true, 
-                  cancelable: true,
-                  clientX: Math.random() * window.innerWidth,
-                  clientY: Math.random() * window.innerHeight
-                });
-              } else {
-                event = new Event(config.name, { bubbles: true, cancelable: true });
-              }
-              
-              config.target.dispatchEvent(event);
-              console.log(`✓ Dispatched ${config.name} on ${config.target === window ? 'window' : config.target === document ? 'document' : 'element'}`);
-            } catch (e) {
-              console.warn(`Failed to dispatch ${config.name}:`, e);
-            }
-          });
-          
-          // Step 3: Title manipulation to signal foreign content
-          setTimeout(() => {
-            try {
-              const originalTitle = document.title;
-              const titleWithLang = `[${sourceLang.toUpperCase()}] ${originalTitle}`;
-              document.title = titleWithLang;
-              
-              console.log(`✓ Updated title, signaling Chrome: ${titleWithLang.substring(0, 50)}`);
-              
-              // Restore title after delay
-              setTimeout(() => {
-                document.title = originalTitle;
-              }, 2000);
-            } catch (e) {
-              console.warn('Title manipulation failed:', e);
-            }
-          }, 300);
-          
-        }, 150);
-      }, 100);
-      
-      console.log('✅ Translation trigger initiated - Chrome should show translate bar within 2-5 seconds');
-    } catch (error) {
-      console.error('Translation trigger failed:', error);
     }
   }
 
@@ -346,6 +273,8 @@
       const { lang: sourceLang, confidence } = detectionResult;
       const browserLang = getBrowserLanguage();
       
+      console.log(`📊 Detected: ${sourceLang}, Browser: ${browserLang}, Confidence: ${confidence.toFixed(2)}`);
+      
       if (sourceLang === browserLang) {
         console.log('ℹ️ Page language matches browser language, skipping');
         return false;
@@ -358,25 +287,100 @@
 
       console.log(`✅ Foreign language detected: ${sourceLang} (confidence: ${confidence.toFixed(2)})`);
       
-      // Wait for page
+      // CRITICAL: Set language IMMEDIATELY before anything else
+      const html = document.documentElement;
+      html.lang = sourceLang;
+      html.setAttribute('xml:lang', sourceLang);
+      if (document.body) {
+        document.body.lang = sourceLang;
+      }
+      console.log(`✓ Language attributes set to: ${sourceLang}`);
+      
+      // Wait for page to be ready
       await waitForPageReady();
 
+      // Remove blockers BEFORE triggering
+      removeBlockers();
+      
       // Enable right-click
       enableRightClick();
-
-      // Remove blockers
-      removeBlockers();
 
       // Save domain for future visits
       saveDomain();
 
-      // Trigger translation
-      setTimeout(() => triggerChromeTranslation(sourceLang), CONFIG.TRANSLATION_DELAY);
+      // Trigger translation with slight delay to let blockers settle
+      setTimeout(() => {
+        console.log('🔥 Now triggering Chrome translation system...');
+        triggerChromeTranslationFinal(sourceLang);
+      }, 300);
       
       return true;
     } catch (error) {
       console.error('Initialization failed:', error);
       return false;
+    }
+  }
+
+  /**
+   * Final translation trigger (after everything is set up)
+   */
+  function triggerChromeTranslationFinal(sourceLang) {
+    if (translationAttempted) return;
+    translationAttempted = true;
+
+    try {
+      console.log(`🔄 FINAL Chrome translation trigger (${sourceLang})...`);
+      
+      // Dispatch many events to wake up Chrome's translator
+      const eventConfigs = [
+        { name: 'load', target: window },
+        { name: 'pageshow', target: window },
+        { name: 'focus', target: window },
+        { name: 'DOMContentLoaded', target: document },
+        { name: 'focusin', target: document },
+        { name: 'visibilitychange', target: document },
+        { name: 'mousemove', target: document },
+        { name: 'mousemove', target: document.body },
+        { name: 'mousemove', target: document.documentElement }
+      ];
+      
+      // Dispatch all events
+      eventConfigs.forEach(config => {
+        try {
+          let event;
+          if (config.name === 'mousemove') {
+            event = new MouseEvent(config.name, { 
+              bubbles: true, 
+              cancelable: true,
+              clientX: Math.random() * window.innerWidth,
+              clientY: Math.random() * window.innerHeight,
+              buttons: 1
+            });
+          } else {
+            event = new Event(config.name, { bubbles: true, cancelable: true });
+          }
+          
+          config.target.dispatchEvent(event);
+        } catch (e) {
+          console.warn(`Failed to dispatch ${config.name}:`, e);
+        }
+      });
+      
+      console.log(`✅ Dispatched ${eventConfigs.length} events`);
+      
+      // Final title manipulation (Chrome watches for this)
+      try {
+        const originalTitle = document.title;
+        document.title = `[${sourceLang.toUpperCase()}] ${originalTitle}`;
+        setTimeout(() => {
+          document.title = originalTitle;
+        }, 2000);
+      } catch (e) {
+        console.warn('Title update failed:', e);
+      }
+      
+    } catch (error) {
+      console.error('Final trigger failed:', error);
     }
   }
 
@@ -451,5 +455,38 @@
     console.warn('SPA observer failed:', e);
   }
 
-  console.log('✅ Extension loaded');
+  // Expose diagnostic helper to window for debugging
+  window.ft_diagnose = function() {
+    console.log('%c=== Force Inline Translate Diagnostics ===', 'color: blue; font-weight: bold; font-size: 14px');
+    
+    const detection = detectLanguage();
+    const browserLang = getBrowserLanguage();
+    const htmlLang = document.documentElement.lang;
+    
+    console.log(`Page Language Detected: ${detection ? detection.lang : 'NONE'}`);
+    console.log(`  Confidence: ${detection ? detection.confidence.toFixed(2) : 'N/A'}`);
+    console.log(`Browser Language: ${browserLang}`);
+    console.log(`HTML lang attribute: ${htmlLang || 'NOT SET'}`);
+    console.log(`Translation Attempted: ${translationAttempted}`);
+    
+    const cspMeta = document.querySelectorAll('meta[http-equiv*="Content-Security-Policy"]').length;
+    console.log(`\nCSP Meta Tags: ${cspMeta}`);
+    
+    const notranslateTags = document.querySelectorAll('[translate="no"]').length +
+                           document.querySelectorAll('.notranslate').length +
+                           document.querySelectorAll('.skiptranslate').length;
+    console.log(`Blocking Classes/Attrs Found: ${notranslateTags}`);
+    
+    console.log(`\n✓ To manually trigger, run: window.ft_manualTrigger()`);
+  };
+  
+  // Manual trigger function for testing
+  window.ft_manualTrigger = function() {
+    console.log('%c🚀 MANUAL TRIGGER STARTED', 'color: red; font-weight: bold');
+    translationAttempted = false;
+    void init();
+    console.log('%c✅ Initialization triggered', 'color: green');
+  };
+
+  console.log('✅ Extension loaded - Run window.ft_diagnose() in console for diagnostics');
 })();
