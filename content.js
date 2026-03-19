@@ -195,36 +195,75 @@
       
       const html = document.documentElement;
       
-      // Clear and reset language attributes
+      // Step 1: Set language attributes on multiple elements
       html.removeAttribute('lang');
       html.removeAttribute('xml:lang');
       
       setTimeout(() => {
-        // Set source language
         html.lang = sourceLang;
         html.setAttribute('xml:lang', sourceLang);
+        if (document.body) {
+          document.body.lang = sourceLang;
+        }
+        console.log(`✓ Set language to: ${sourceLang}`);
         
-        console.log(`Set language to: ${sourceLang}`);
-        
-        // Dispatch browser-relevant events
+        // Step 2: Dispatch key events to multiple targets
         setTimeout(() => {
-          const events = ['load', 'focus', 'visibilitychange', 'mousemove'];
-          events.forEach(name => {
+          const eventConfigs = [
+            { name: 'load', target: window },
+            { name: 'focus', target: window },
+            { name: 'focusin', target: document },
+            { name: 'DOMContentLoaded', target: document },
+            { name: 'visibilitychange', target: document },
+            { name: 'pageshow', target: window },
+            { name: 'mousemove', target: document },
+            { name: 'mousemove', target: html },
+            { name: 'mousemove', target: document.body }
+          ];
+          
+          eventConfigs.forEach(config => {
             try {
-              const event = name === 'mousemove' 
-                ? new MouseEvent('mousemove', { bubbles: true, cancelable: true })
-                : new Event(name, { bubbles: true, cancelable: true });
+              let event;
+              if (config.name === 'mousemove') {
+                event = new MouseEvent(config.name, { 
+                  bubbles: true, 
+                  cancelable: true,
+                  clientX: Math.random() * window.innerWidth,
+                  clientY: Math.random() * window.innerHeight
+                });
+              } else {
+                event = new Event(config.name, { bubbles: true, cancelable: true });
+              }
               
-              window.dispatchEvent(event);
-              console.log(`✓ Dispatched ${name}`);
+              config.target.dispatchEvent(event);
+              console.log(`✓ Dispatched ${config.name} on ${config.target === window ? 'window' : config.target === document ? 'document' : 'element'}`);
             } catch (e) {
-              console.warn(`Failed to dispatch ${name}:`, e);
+              console.warn(`Failed to dispatch ${config.name}:`, e);
             }
           });
-        }, 200);
+          
+          // Step 3: Title manipulation to signal foreign content
+          setTimeout(() => {
+            try {
+              const originalTitle = document.title;
+              const titleWithLang = `[${sourceLang.toUpperCase()}] ${originalTitle}`;
+              document.title = titleWithLang;
+              
+              console.log(`✓ Updated title, signaling Chrome: ${titleWithLang.substring(0, 50)}`);
+              
+              // Restore title after delay
+              setTimeout(() => {
+                document.title = originalTitle;
+              }, 2000);
+            } catch (e) {
+              console.warn('Title manipulation failed:', e);
+            }
+          }, 300);
+          
+        }, 150);
       }, 100);
       
-      console.log('✅ Translation trigger completed');
+      console.log('✅ Translation trigger initiated - Chrome should show translate bar within 2-5 seconds');
     } catch (error) {
       console.error('Translation trigger failed:', error);
     }
@@ -343,19 +382,53 @@
 
   // Initialize on page load
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => { void init(); }, { once: true });
+    document.addEventListener('DOMContentLoaded', () => { 
+      console.log('📄 DOMContentLoaded fired, initializing...');
+      void init(); 
+    }, { once: true });
   } else {
+    console.log('📄 Document already loaded, initializing immediately...');
     void init();
   }
 
-  // Backup initialization for slow pages
+  // Multiple backup initializations for stubborn pages
   setTimeout(() => {
     if (!translationAttempted) {
-      console.log('⏱️ Backup: No translation yet, retrying...');
+      console.log('⏱️  Backup 1 (2s): No translation yet, retrying...');
       translationAttempted = false;
       void init();
     }
-  }, 3500);
+  }, 2000);
+
+  setTimeout(() => {
+    if (!translationAttempted) {
+      console.log('⏱️  Backup 2 (4s): Still no translation, aggressive retry...');
+      translationAttempted = false;
+      void init();
+    }
+  }, 4000);
+
+  setTimeout(() => {
+    if (!translationAttempted) {
+      console.log('⏱️  Backup 3 (6s): Final attempt with extra triggers...');
+      translationAttempted = false;
+      void init();
+      
+      // Extra aggressive final trigger
+      const finalTrigger = () => {
+        try {
+          const md = new MouseEvent('mousemove', { bubbles: true });
+          document.documentElement.dispatchEvent(md);
+          window.dispatchEvent(new Event('focus'));
+          document.dispatchEvent(new Event('visibilitychange'));
+          console.log('✓ Final aggressive trigger dispatched');
+        } catch (e) {
+          console.warn('Final trigger failed:', e);
+        }
+      };
+      setTimeout(finalTrigger, 1000);
+    }
+  }, 6000);
 
   // SPA/dynamic content detection
   try {
